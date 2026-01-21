@@ -1,6 +1,10 @@
 [build-system]
-requires = ["setuptools>=42", "wheel", "cibuildwheel", "scikit-build", "ninja"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.5"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+cmake.args = ["-DCMAKE_BUILD_TYPE=Release"]
+wheel.packages = ["src/geodesk"]
 
 [tool.cibuildwheel]
 build = "cp*-manylinux_x86_64 cp*-win_amd64 cp*-macosx_x86_64"
@@ -24,7 +28,6 @@ classifiers = [
     "Operating System :: MacOS",  
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -33,10 +36,14 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
     "Topic :: Database :: Database Engines/Servers",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "shapely >=2.1,<2.2"
+    "pytest>=9.0.2",
+    "shapely >=2.1,<2.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
 
 [project.urls]
 Homepage = "https://www.geodesk.com"
