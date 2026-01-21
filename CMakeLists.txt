@@ -1,6 +1,4 @@
-﻿option(BUILD_WHEELS "Build wheels via cibuildwheel" OFF)
-
-cmake_minimum_required (VERSION 3.14)
+﻿cmake_minimum_required (VERSION 3.15)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -32,11 +30,13 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -U NDEBUG"
 
 include(FetchContent)
 
-# Fetch GEOS 3.11.3
-FetchContent_Declare(geos
+# Fetch GEOS 3.13.1
+# OVERRIDE_FIND_PACKAGE makes subsequent find_package(GEOS) use this instead of system GEOS
+FetchContent_Declare(GEOS
     URL https://download.osgeo.org/geos/geos-3.13.1.tar.bz2
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-FetchContent_MakeAvailable(geos)
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    OVERRIDE_FIND_PACKAGE)
+FetchContent_MakeAvailable(GEOS)
 
 if(TARGET geos AND TARGET geos_c)
 	message(STATUS "GEOS and GEOS C API are available.")
@@ -47,20 +47,17 @@ endif()
 message(STATUS "GeoDesk: CIBW_PYTHON_INCLUDE = ${CIBW_PYTHON_INCLUDE}")
 message(STATUS "GeoDesk: CIBW_PYTHON_LIBRARIES = ${CIBW_PYTHON_LIBRARIES}")
 
-if(BUILD_WHEELS)
-	find_package(PythonExtensions REQUIRED)
-else()
-	 find_package(Python REQUIRED COMPONENTS Development.Module Development.Embed)
-	 include_directories(${Python_INCLUDE_DIRS})
+# Find Python - scikit-build-core sets this up automatically
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+include_directories(${Python_INCLUDE_DIRS})
 
-	if (Python_FOUND)
-		message(STATUS "Python found: ${Python_EXECUTABLE}")
-		message(STATUS "Python version: ${Python_VERSION}")
-		message(STATUS "Python libraries: ${Python_LIBRARIES}")
-		message(STATUS "Python includes: ${Python_INCLUDE_DIRS}")
-	else()
-		message(FATAL_ERROR "Python not found!")
-	endif()
+if (Python_FOUND)
+	message(STATUS "Python found: ${Python_EXECUTABLE}")
+	message(STATUS "Python version: ${Python_VERSION}")
+	message(STATUS "Python libraries: ${Python_LIBRARIES}")
+	message(STATUS "Python includes: ${Python_INCLUDE_DIRS}")
+else()
+	message(FATAL_ERROR "Python not found!")
 endif()
 
 # Pass Python variables to submodules
@@ -69,7 +66,7 @@ set(Python_LIBRARIES ${Python_LIBRARIES} CACHE INTERNAL "Python libraries")
 
 
 set(GEODESK_PYTHON ON CACHE INTERNAL "Enable GeoDesk Python support")
-if(BUILD_WHEELS)
+if(SKBUILD)
 	set(GEODESK_PYTHON_WHEELS ON CACHE INTERNAL "Enable Support for Python Wheels")
 endif()
 
@@ -85,7 +82,7 @@ if(GEODESK_SOURCE_DIR)
 else()
 	include(FetchContent)
 	FetchContent_Declare(geodesk GIT_REPOSITORY
-			https://github.com/clarisma/libgeodesk.git
+			https://github.com/ridewithgps/libgeodesk.git
 			GIT_TAG main)
 	FetchContent_MakeAvailable(geodesk)
 endif()
@@ -100,7 +97,7 @@ set(LIBRARIES
 	geos
 )
 
-if(NOT BUILD_WHEELS)
+if(NOT SKBUILD)
 	# Create test harness
 	# message(STATUS "INCLUDES = ${INCLUDES}")
 	add_executable (geodesk-py-test "src/main.cxx" ${SOURCE_FILES})
@@ -111,29 +108,18 @@ if(NOT BUILD_WHEELS)
 	target_compile_definitions(geodesk-py-test PRIVATE _WIN32_WINNT=0x0601)
 endif()
 
-add_library(_geodesk MODULE ${SOURCE_FILES})
-# set_target_properties(geodesk_py PROPERTIES OUTPUT_NAME "geodesk")
-# target_include_directories(geodesk PRIVATE ${INCLUDES})
-target_link_libraries(_geodesk ${LIBRARIES})
+Python_add_library(_geodesk MODULE WITH_SOABI ${SOURCE_FILES})
+target_link_libraries(_geodesk PRIVATE ${LIBRARIES})
 target_compile_definitions(_geodesk PRIVATE GEODESK_WITH_GEOS)
 target_compile_definitions(_geodesk PRIVATE INCLUDE_NLOHMANN_JSON_HPP_)
-if(BUILD_WHEELS)
-	python_extension_module(_geodesk)
-else()
-	set_target_properties(_geodesk PROPERTIES PREFIX "") # to remove 'lib' prefix on Unix systems
-	if(WIN32)
-		set_target_properties(_geodesk PROPERTIES SUFFIX ".pyd")
-	endif()
-endif()
 
 # message(STATUS "C++ Compiler Flags, Release build: ${CMAKE_CXX_FLAGS_RELEASE}")
   
 target_compile_definitions(_geodesk PRIVATE GEODESK_PYTHON)
 # TODO: Add tests and install targets if needed.
 
-if(BUILD_WHEELS)
-	install(TARGETS _geodesk
-		LIBRARY DESTINATION geodesk)
+if(SKBUILD)
+	install(TARGETS _geodesk LIBRARY DESTINATION geodesk)
 else()
 	install(TARGETS _geodesk
 			LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}

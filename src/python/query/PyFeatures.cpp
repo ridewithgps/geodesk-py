@@ -4,6 +4,7 @@
 #include "PyFeatures.h"
 #include <geodesk/filter/ComboFilter.h>
 #include <geodesk/filter/IntersectsFilter.h>
+#include <geodesk/feature/IdIndex.h>
 // #include "match/MatcherDecoder.h"       // TODO: remove (only needed for explain)
 #include <geodesk/geom/Area.h>
 #include <geodesk/geom/GeometryBuilder.h>
@@ -1166,6 +1167,44 @@ PyObject* PyFeatures::findById(FeatureType type, PyObject* args, PyObject* kwarg
         Py_RETURN_NONE;
     }
 
+    // Try fast O(1) ID index lookup first
+    if (selectionType == &World::SUBTYPE)
+    {
+        IdIndex* idx = store->idIndex();
+        if (idx)
+        {
+            FeaturePtr feature = idx->findById(id, type);
+            if (!feature.isNull())
+            {
+                // Apply matcher/filter if query has constraints
+                if (!matcher->mainMatcher().accept(feature))
+                {
+                    Py_RETURN_NONE;
+                }
+                if (filter && !filter->accept(store, feature, FastFilterHint()))
+                {
+                    Py_RETURN_NONE;
+                }
+                // Check bounds if active
+                if (flags & SelectionFlags::BOUNDS_ACTIVE)
+                {
+                    if (feature.isNode())
+                    {
+                        if (!NodePtr(feature).intersects(bounds)) Py_RETURN_NONE;
+                    }
+                    else if (!feature.intersects(bounds))
+                    {
+                        Py_RETURN_NONE;
+                    }
+                }
+                return PyFeature::create(store, feature, Py_None);
+            }
+            Py_RETURN_NONE;  // ID not found in index
+        }
+        // Fall through to brute-force if no index available
+    }
+
+    // Original brute-force implementation (fallback)
     TypedFeatureId typedId = TypedFeatureId::ofTypeAndId(type, id);
     if (selectionType == &World::SUBTYPE)
     {

@@ -3,6 +3,7 @@
 
 from geodesk import *
 import pytest
+import os
 
 @pytest.fixture(scope="session")
 def features():
@@ -13,7 +14,19 @@ def features():
 
 @pytest.fixture(scope="session")
 def monaco():
-    yield Features("data/monaco")
+    """Monaco GOL - NO ID index (tests brute-force fallback)."""
+    yield Features("test/data/monaco.gol")
+
+@pytest.fixture(scope="session")
+def monaco_indexed():
+    """Monaco GOL - WITH ID index (tests O(1) lookup).
+
+    Same dataset as monaco fixture but built with -i flag.
+    """
+    gol_path = "test/data/monaco-ids.gol"
+    if not os.path.exists(gol_path):
+        pytest.skip(f"monaco-ids.gol not available at {gol_path}")
+    yield Features(gol_path)
 
 @pytest.fixture(scope="session")
 def monaco_updatable():
